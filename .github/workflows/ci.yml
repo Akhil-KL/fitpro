@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fitpro
+          POSTGRES_PASSWORD: fitpro
+          POSTGRES_DB: fitpro
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U fitpro" --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - name: Migrations apply cleanly on PostgreSQL and match the models
+        env:
+          DATABASE_URL: postgresql+psycopg://fitpro:fitpro@localhost:5432/fitpro
+        run: |
+          alembic upgrade head
+          alembic check
+      - name: Tests
+        run: pytest
+      - run: ruff check app tests
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm run build
